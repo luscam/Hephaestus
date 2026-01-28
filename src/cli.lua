@@ -1,9 +1,3 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
---
--- cli.lua
--- This script contains the Code for the Prometheus CLI
-
--- Configure package.path for requiring Prometheus
 local function script_path()
 	local str = debug.getinfo(2, "S").source:sub(2)
 	return str:match("(.*[/%\\])")
@@ -13,7 +7,6 @@ package.path = script_path() .. "?.lua;" .. package.path;
 local Prometheus = require("prometheus");
 Prometheus.Logger.logLevel = Prometheus.Logger.LogLevel.Info;
 
--- Check if the file exists
 local function file_exists(file)
     local f = io.open(file, "rb")
     if f then f:close() end
@@ -27,8 +20,6 @@ string.split = function(str, sep)
     return fields
 end
 
--- get all lines from a file, returns an empty
--- list/table if the file does not exist
 local function lines_from(file)
     if not file_exists(file) then return {} end
     local lines = {}
@@ -38,16 +29,15 @@ local function lines_from(file)
     return lines
   end
 
--- CLI
 local config;
 local sourceFile;
 local outFile;
 local luaVersion;
 local prettyPrint;
+local secretKey;
 
 Prometheus.colors.enabled = true;
 
--- Parse Arguments
 local i = 1;
 while i <= #arg do
     local curr = arg[i];
@@ -72,9 +62,7 @@ while i <= #arg do
             end
 
             local content = table.concat(lines_from(filename), "\n");
-            -- Load Config from File
             local func = loadstring(content);
-            -- Sandboxing
             setfenv(func, {});
             config = func();
         elseif curr == "--out" or curr == "--o" then
@@ -83,6 +71,9 @@ while i <= #arg do
                 Prometheus.Logger:warn("The output file was specified multiple times!");
             end
             outFile = arg[i];
+        elseif curr == "--key" or curr == "--k" then
+            i = i + 1;
+            secretKey = arg[i];
         elseif curr == "--nocolors" then
             Prometheus.colors.enabled = false;
         elseif curr == "--Lua51" then
@@ -92,7 +83,6 @@ while i <= #arg do
         elseif curr == "--pretty" then
             prettyPrint = true;
         elseif curr == "--saveerrors" then
-            -- Override error callback
             Prometheus.Logger.errorCallback =  function(...)
                 print(Prometheus.colors(Prometheus.Config.NameUpper .. ": " .. ..., "red"))
                 
@@ -127,9 +117,13 @@ if not config then
     config = Prometheus.Presets.Minify;
 end
 
--- Add Option to override Lua Version
 config.LuaVersion = luaVersion or config.LuaVersion;
 config.PrettyPrint = prettyPrint ~= nil and prettyPrint or config.PrettyPrint;
+config.SecretKey = secretKey or config.SecretKey;
+
+if not config.SecretKey and not secretKey then
+    Prometheus.Logger:warn("No SecretKey provided. Using default insecure key. Pass --key <string> for security.");
+end
 
 if not file_exists(sourceFile) then
     Prometheus.Logger:error(string.format("The File \"%s\" was not found!", sourceFile));
@@ -148,7 +142,6 @@ local pipeline = Prometheus.Pipeline:fromConfig(config);
 local out = pipeline:apply(source, sourceFile);
 Prometheus.Logger:info(string.format("Writing output to \"%s\"", outFile));
 
--- Write Output
 local handle = io.open(outFile, "w");
 handle:write(out);
 handle:close();

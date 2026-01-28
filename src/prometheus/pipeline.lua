@@ -1,10 +1,3 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
---
--- pipeline.lua
---
--- This Script Provides a Configurable Obfuscation Pipeline that can obfuscate code using different Modules
--- These Modules can simply be added to the pipeline
-
 local config = require("config");
 local Ast    = require("prometheus.ast");
 local Enums  = require("prometheus.enums");
@@ -12,16 +5,15 @@ local util = require("prometheus.util");
 local Parser = require("prometheus.parser");
 local Unparser = require("prometheus.unparser");
 local logger = require("logger");
+local PRNG = require("prometheus.prng");
 
 local NameGenerators = require("prometheus.namegenerators");
-
 local Steps = require("prometheus.steps");
 
 local lookupify = util.lookupify;
 local LuaVersion = Enums.LuaVersion;
 local AstKind = Ast.AstKind;
 
--- On Windows os.clock can be used. On other Systems os.time must be used for benchmarking
 local isWindows = package and package.config and type(package.config) == "string" and package.config:sub(1,1) == "\\";
 local function gettime()
 	if isWindows then
@@ -35,10 +27,11 @@ local Pipeline = {
 	NameGenerators = NameGenerators;
 	Steps = Steps;
 	DefaultSettings = {
-		LuaVersion = LuaVersion.LuaU; -- The Lua Version to use for the Tokenizer, Parser and Unparser
-		PrettyPrint = false; -- Note that Pretty Print is currently not producing Pretty results
-		Seed = 0; -- The Seed. 0 or below uses the current time as a seed
-		VarNamePrefix = ""; -- The Prefix that every variable will start with
+		LuaVersion = LuaVersion.LuaU;
+		PrettyPrint = false;
+		Seed = 0;
+        SecretKey = "HephaestusDefaultKey"; 
+		VarNamePrefix = "";
 	}
 }
 
@@ -54,12 +47,14 @@ function Pipeline:new(settings)
 	local prettyPrint = settings.PrettyPrint or Pipeline.DefaultSettings.PrettyPrint;
 	local prefix = settings.VarNamePrefix or Pipeline.DefaultSettings.VarNamePrefix;
 	local seed = settings.Seed or 0;
+    local secretKey = settings.SecretKey or Pipeline.DefaultSettings.SecretKey;
 	
 	local pipeline = {
 		LuaVersion = luaVersion;
 		PrettyPrint = prettyPrint;
 		VarNamePrefix = prefix;
 		Seed = seed;
+        SecretKey = secretKey;
 		parser = Parser:new({
 			LuaVersion = luaVersion;
 		});
@@ -86,11 +81,11 @@ function Pipeline:fromConfig(config)
 		PrettyPrint   = config.PrettyPrint or false;
 		VarNamePrefix = config.VarNamePrefix or "";
 		Seed          = config.Seed or 0;
+        SecretKey     = config.SecretKey;
 	});
 
 	pipeline:setNameGenerator(config.NameGenerator or "MangledShuffled")
 
-	-- Add all Steps defined in Config
 	local steps = config.Steps or {};
 	for i, step in ipairs(steps) do
 		if type(step.Name) ~= "string" then
@@ -164,44 +159,74 @@ function Pipeline:apply(code, filename)
 	local startTime = gettime();
 	filename = filename or "Anonymus Script";
 	logger:info(string.format("Applying Obfuscation Pipeline to %s ...", filename));
-	-- Seed the Random Generator
-	if(self.Seed > 0) then
-		math.randomseed(self.Seed);
-	else
-		math.randomseed(os.time())
-	end
 	
-	logger:info("Parsing ...");
-	local parserStartTime = gettime();
+    local finalSeed = self.SecretKey
+    if self.Seed ~= 0 then
+        finalSeed = finalSeed .. tostring(self.Seed)
+    else
+        finalSeed = finalSeed .. tostring(os.time())
+    end
 
-	local sourceLen = string.len(code);
-	local ast = self.parser:parse(code);
+    logger:info("Initializing Secure Hephaestus PRNG with provided Secret Key...");
+    local securePrng = PRNG:new(finalSeed)
 
-	local parserTimeDiff = gettime() - parserStartTime;
-	logger:info(string.format("Parsing Done in %.2f seconds", parserTimeDiff));
+    local originalRandom = math.random
+    local originalRandomSeed = math.randomseed
+
+    -- Safer hook for math.random to emulate standard Lua behavior precisely
+    math.random = function(a, b)
+        if a and b then
+            return securePrng:random(a, b)
+        elseif a then
+            return securePrng:random(1, a)
+        else
+            return securePrng:next()
+        end
+    end
+    
+    math.randomseed = function(s)
+        securePrng = PRNG:new(s)
+    end
+
+    local status, result = pcall(function()
+        logger:info("Parsing ...");
+        local parserStartTime = gettime();
+
+        local sourceLen = string.len(code);
+        local ast = self.parser:parse(code);
+
+        local parserTimeDiff = gettime() - parserStartTime;
+        logger:info(string.format("Parsing Done in %.2f seconds", parserTimeDiff));
+        
+        for i, step in ipairs(self.steps) do
+            local stepStartTime = gettime();
+            logger:info(string.format("Applying Step \"%s\" ...", step.Name or "Unnamed"));
+            local newAst = step:apply(ast, self);
+            if type(newAst) == "table" then
+                ast = newAst;
+            end
+            logger:info(string.format("Step \"%s\" Done in %.2f seconds", step.Name or "Unnamed", gettime() - stepStartTime));
+        end
+        
+        self:renameVariables(ast);
+        
+        code = self:unparse(ast);
+        
+        local timeDiff = gettime() - startTime;
+        logger:info(string.format("Obfuscation Done in %.2f seconds", timeDiff));
+        
+        logger:info(string.format("Generated Code size is %.2f%% of the Source Code size", (string.len(code) / sourceLen)*100))
+        return code
+    end)
+
+    math.random = originalRandom
+    math.randomseed = originalRandomSeed
+
+    if not status then
+        error(result)
+    end
 	
-	-- User Defined Steps
-	for i, step in ipairs(self.steps) do
-		local stepStartTime = gettime();
-		logger:info(string.format("Applying Step \"%s\" ...", step.Name or "Unnamed"));
-		local newAst = step:apply(ast, self);
-		if type(newAst) == "table" then
-			ast = newAst;
-		end
-		logger:info(string.format("Step \"%s\" Done in %.2f seconds", step.Name or "Unnamed", gettime() - stepStartTime));
-	end
-	
-	-- Rename Variables Step
-	self:renameVariables(ast);
-	
-	code = self:unparse(ast);
-	
-	local timeDiff = gettime() - startTime;
-	logger:info(string.format("Obfuscation Done in %.2f seconds", timeDiff));
-	
-	logger:info(string.format("Generated Code size is %.2f%% of the Source Code size", (string.len(code) / sourceLen)*100))
-	
-	return code;
+	return result;
 end
 
 function Pipeline:unparse(ast)
@@ -243,8 +268,5 @@ function Pipeline:renameVariables(ast)
 	local timeDiff = gettime() - startTime;
 	logger:info(string.format("Renaming Done in %.2f seconds", timeDiff));
 end
-
-
-
 
 return Pipeline;

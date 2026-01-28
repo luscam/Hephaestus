@@ -1,38 +1,22 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
---
--- pipeline.lua
---
--- This Script Provides some configuration presets
-
 return {
     ["Minify"] = {
-        -- The default LuaVersion is Lua51
         LuaVersion = "Lua51";
-        -- For minifying no VarNamePrefix is applied
         VarNamePrefix = "";
-        -- Name Generator for Variables
-        NameGenerator = "MangledShuffled";
-        -- No pretty printing
+        NameGenerator = "Hephaestus";
         PrettyPrint = false;
-        -- Seed is generated based on current time
         Seed = 0;
-        -- No obfuscation steps
+        SecretKey = "HephaestusDefault";
         Steps = {
 
         }
     };
     ["Weak"] = {
-        -- The default LuaVersion is Lua51
         LuaVersion = "Lua51";
-        -- For minifying no VarNamePrefix is applied
         VarNamePrefix = "";
-        -- Name Generator for Variables that look like this: IlI1lI1l
-        NameGenerator = "MangledShuffled";
-        -- No pretty printing
+        NameGenerator = "Hephaestus";
         PrettyPrint = false;
-        -- Seed is generated based on current time
         Seed = 0;
-        -- Obfuscation steps
+        SecretKey = "HephaestusDefault";
         Steps = {
             {
                 Name = "Vmify";
@@ -56,17 +40,12 @@ return {
         }
     };
     ["Vmify"] = {
-        -- The default LuaVersion is Lua51
         LuaVersion = "Lua51";
-        -- For minifying no VarNamePrefix is applied
         VarNamePrefix = "";
-        -- Name Generator for Variables that look like this: IlI1lI1l
-        NameGenerator = "MangledShuffled";
-        -- No pretty printing
+        NameGenerator = "Hephaestus";
         PrettyPrint = false;
-        -- Seed is generated based on current time
         Seed = 0;
-        -- Obfuscation steps
+        SecretKey = "HephaestusDefault";
         Steps = {
             {
                 Name = "Vmify";
@@ -77,17 +56,12 @@ return {
         }
     };
     ["Medium"] = {
-        -- The default LuaVersion is Lua51
         LuaVersion = "Lua51";
-        -- For minifying no VarNamePrefix is applied
         VarNamePrefix = "";
-        -- Name Generator for Variables
-        NameGenerator = "MangledShuffled";
-        -- No pretty printing
+        NameGenerator = "Hephaestus";
         PrettyPrint = false;
-        -- Seed is generated based on current time
         Seed = 0;
-        -- Obfuscation steps
+        SecretKey = "HephaestusDefault";
         Steps = {
             {
                 Name = "EncryptStrings";
@@ -132,17 +106,12 @@ return {
         }
     };
     ["Strong"] = {
-        -- The default LuaVersion is Lua51
         LuaVersion = "Lua51";
-        -- For minifying no VarNamePrefix is applied
         VarNamePrefix = "";
-        -- Name Generator for Variables that look like this: IlI1lI1l
-        NameGenerator = "MangledShuffled";
-        -- No pretty printing
+        NameGenerator = "Hephaestus";
         PrettyPrint = false;
-        -- Seed is generated based on current time
         Seed = 0;
-        -- Obfuscation steps
+        SecretKey = "HephaestusDefault";
         Steps = {
             {
                 Name = "Vmify";
